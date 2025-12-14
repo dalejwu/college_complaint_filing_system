@@ -1,45 +1,51 @@
-<?php 
-include('db.php'); 
+<?php
+include('includes/db.php');
 session_start();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_SESSION['student_id'])) {
         $error_msg = "You must be logged in to file a complaint.";
     } else {
-        $student_id = $_SESSION['student_id']; 
+        $student_id = $_SESSION['student_id'];
         $title = trim($_POST['title']);
         $category = trim($_POST['what_category'] ?? '');
         $description = trim($_POST['description']);
         $respondents = trim($_POST['respondents'] ?? '');
         $respondent_detail = trim($_POST['respondent_detail'] ?? '');
         $respondent_count = isset($_POST['respondent_count']) && $_POST['respondent_count'] !== '' ? intval($_POST['respondent_count']) : NULL;
-        // If user chose Others for respondents, use the detail choice when provided
+
         if ($respondents === 'Others' && !empty($respondent_detail)) {
             $respondents = $respondent_detail;
         }
-        
-        // category now free-text
-        
+
         if (empty($title) || empty($category) || empty($description) || empty($respondents)) {
             $error_msg = "Please fill in all required fields.";
         } else {
             $uploaded_files = array();
             $upload_dir = 'uploads/';
-            
+
             if (!empty($_FILES['attachments']['name'][0])) {
                 foreach ($_FILES['attachments']['name'] as $key => $file_name) {
                     if ($_FILES['attachments']['error'][$key] === UPLOAD_ERR_OK) {
                         $file_tmp = $_FILES['attachments']['tmp_name'][$key];
                         $file_size = $_FILES['attachments']['size'][$key];
                         $file_type = $_FILES['attachments']['type'][$key];
-                        
-                        $allowed_types = array('image/jpeg', 'image/png', 'image/gif', 'image/jpg');
+
+                        $allowed_types = array(
+                            'image/jpeg',
+                            'image/png',
+                            'image/gif',
+                            'image/jpg',
+                            'application/pdf',
+                            'application/msword',
+                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                        );
                         if (in_array($file_type, $allowed_types)) {
                             if ($file_size <= 5000000) {
                                 $file_ext = pathinfo($file_name, PATHINFO_EXTENSION);
                                 $new_filename = uniqid() . '_' . time() . '_' . $key . '.' . $file_ext;
                                 $upload_path = $upload_dir . $new_filename;
-                                
+
                                 if (move_uploaded_file($file_tmp, $upload_path)) {
                                     $uploaded_files[] = $upload_path;
                                 }
@@ -48,10 +54,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
-            
+
             $attachments = !empty($uploaded_files) ? implode(',', $uploaded_files) : null;
 
-            // Backward-compatible insert depending on available columns
+            // Check columns
             $hasRespondentsCol = $conn->query("SHOW COLUMNS FROM complaints LIKE 'respondents'");
             $hasRespondentCountCol = $conn->query("SHOW COLUMNS FROM complaints LIKE 'respondent_count'");
             $hasRespondents = $hasRespondentsCol && $hasRespondentsCol->num_rows > 0;
@@ -67,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $conn->prepare("INSERT INTO complaints (student_id, title, category, description, attachments) VALUES (?, ?, ?, ?, ?)");
                 $stmt->bind_param("issss", $student_id, $title, $category, $description, $attachments);
             }
-            
+
             if ($stmt->execute()) {
                 $success_msg = "Complaint filed successfully!";
                 $form_reset = true;
@@ -82,375 +88,327 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Complaint</title>
+    <title>File Complaint - Student Dashboard</title>
     <link rel="stylesheet" href="CSS/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        .confirmation-details {
-            margin: 20px 0;
-            padding: 20px;
-            background: var(--bg-secondary);
-            border-radius: var(--border-radius);
-            border-left: 4px solid var(--primary-color);
-            box-shadow: var(--shadow-light);
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f9fafb;
         }
-        .detail-item {
-            margin: 12px 0;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
+
+        .form-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+            border: 1px solid #f3f4f6;
         }
-        .detail-item:last-child {
-            border-bottom: none;
+
+        .form-group {
+            margin-bottom: 24px;
         }
-        .detail-item strong {
-            color: var(--text-primary);
-            display: inline-block;
-            min-width: 100px;
-            font-weight: 600;
-            font-size: 14px;
+
+        .form-group label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #374151;
         }
-        .detail-item span {
-            color: var(--text-secondary);
-            flex: 1;
-            line-height: 1.5;
+
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.15s ease-in-out;
+            box-sizing: border-box;
+            /* Important for padding */
         }
-        .modal-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-            margin-top: 24px;
-            padding-top: 20px;
-            border-top: 2px solid var(--bg-secondary);
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            border-color: #4f46e5;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
         }
-        .btn-cancel {
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #6c757d, #5a6268);
+
+        .submit-btn {
+            background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
             color: white;
             border: none;
-            border-radius: var(--border-radius);
-            cursor: pointer;
+            padding: 14px 28px;
+            border-radius: 8px;
             font-weight: 600;
-            font-size: 14px;
-            transition: var(--transition);
-            position: relative;
-            overflow: hidden;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
         }
-        .btn-cancel::before {
-            content: '';
-            position: absolute;
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        /* Modal Styles Reuse */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
             top: 0;
-            left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
         }
-        .btn-cancel:hover::before {
-            left: 100%;
-        }
-        .btn-cancel:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-medium);
-        }
-        .btn-confirm {
-            padding: 12px 24px;
-            background: var(--bg-gradient);
-            color: var(--text-on-primary);
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 0;
             border: none;
-            border-radius: var(--border-radius);
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 14px;
-            transition: var(--transition);
-            position: relative;
-            overflow: hidden;
-        }
-        .btn-confirm::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
             width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s;
+            max-width: 500px;
+            border-radius: 16px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            animation: modalSlideIn 0.3s ease-out;
         }
-        .btn-confirm:hover::before {
-            left: 100%;
+
+        .close {
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #aaa;
+            margin: 15px 20px 0 0;
         }
-        .btn-confirm:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-medium);
+
+        .close:hover {
+            color: #000;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
         }
     </style>
 </head>
+
 <body>
-<div class="dashboard-container">
-    <div class="form-container">
-        <h2>File a Complaint</h2>
-        
-        <a href="Student_Login/dashboard.php" class="return-btn" style="display: inline-block; margin-bottom: 20px; padding: 10px 20px; background: linear-gradient(135deg, #6c757d, #5a6268); color: white; text-decoration: none; border-radius: 12px; font-weight: 500; transition: all 0.3s ease; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">← Return to Dashboard</a>
-        
-        <?php if (isset($error_msg)): ?>
-            <div class='message error'><?php echo htmlspecialchars($error_msg); ?></div>
-        <?php endif; ?>
-        
-        <?php if (isset($success_msg)): ?>
-            <div class='message success'><?php echo htmlspecialchars($success_msg); ?></div>
-        <?php endif; ?>
-        
-        <form id="complaintForm" action="" method="POST" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="title">Title</label>
-                <input type="text" id="title" name="title" required placeholder="Enter complaint title">
+    <div class="dashboard-container">
+        <!-- Hero Header with Nav -->
+        <!-- Admin-Style Header -->
+        <div class="dashboard-header">
+            <div>
+                <h2>File a Complaint</h2>
+                <p class="login-subtitle">Submit a new concern to the administration.</p>
             </div>
 
-            <div class="form-group">
-                <label for="what_category">What Category?</label>
-                <input type="text" id="what_category" name="what_category" required placeholder="Enter the category">
-            </div>
-
-            <div class="form-group">
-                <label for="respondents">Who are the respondents?</label>
-                <select id="respondents" name="respondents" required>
-                    <option value="">Select an option</option>
-                    <option value="Facility">Facility</option>
-                    <option value="Faculty">Faculty</option>
-                    <option value="Administrative">Administrative</option>
-                    <option value="Others">Others</option>
-                </select>
-            </div>
-            <div class="form-group" id="respondent_detail_group" style="display:none;">
-                <label for="respondent_detail">Please specify:</label>
-                <select id="respondent_detail" name="respondent_detail">
-                    <option value="">Select an option</option>
-                    <option value="Single Person">Single Person</option>
-                    <option value="Multiple People">Multiple People</option>
-                </select>
-            </div>
-            <div class="form-group" id="respondent_count_group" style="display: none;">
-                <label for="respondent_count">How many respondents? (optional)</label>
-                <input type="number" id="respondent_count" name="respondent_count" min="1" placeholder="Enter a number or leave blank">
-            </div>
-
-            <div class="form-group">
-                <label for="description">Description</label>
-                <textarea id="description" name="description" required placeholder="Please provide detailed description of your complaint"></textarea>
-            </div>
-
-            <div class="form-group">
-                <label for="attachments">Attach Images (Optional)</label>
-                <input type="file" id="attachments" name="attachments[]" multiple accept="image/jpeg,image/png,image/gif,image/jpg" />
-                <small style="color: var(--text-muted); display: block; margin-top: 5px;">You can select multiple images. Maximum 5MB per file. Accepted formats: JPEG, PNG, GIF</small>
-            </div>
-
-            <button type="submit" name="submit" onclick="return confirmSubmission()" id="submitBtn">Submit Complaint</button>
-        </form>
-    </div>
-</div>
-
-<!-- Custom Confirmation Modal -->
-<div id="confirmationModal" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 500px;">
-        <span class="close" onclick="closeConfirmationModal()">&times;</span>
-        <h3 style="color: var(--primary-color); font-size: 24px; font-weight: 700; margin-bottom: 20px;">Confirm Complaint Submission</h3>
-        <div class="confirmation-details">
-            <p><strong>Please review your complaint details:</strong></p>
-            <div class="detail-item">
-                <strong>Title:</strong> <span id="confirm-title"></span>
-            </div>
-            <div class="detail-item">
-                <strong>Category:</strong> <span id="confirm-category"></span>
-            </div>
-            <div class="detail-item">
-                <strong>Description:</strong> <span id="confirm-description"></span>
-            </div>
-            <div class="detail-item">
-                <strong>Respondents:</strong> <span id="confirm-respondents"></span>
+            <div class="admin-actions">
+                <a href="Student/dashboard.php" class="admin-btn">Dashboard</a>
+                <a href="Student/profile.php" class="admin-btn">Profile</a>
+                <a href="Student/actions/logout.php" class="admin-btn danger">Logout</a>
             </div>
         </div>
-        <div class="modal-actions">
-            <button type="button" class="btn-cancel" onclick="closeConfirmationModal()">Cancel</button>
-            <button type="button" class="btn-confirm" onclick="submitComplaint()">Submit Complaint</button>
+
+        <div class="form-card">
+            <h2 style="margin-top: 0; margin-bottom: 20px; font-size: 1.8rem; color: #111827;">File a New Complaint</h2>
+            <p style="color: #6b7280; margin-bottom: 30px; line-height: 1.6;">Please fill out the form below with specific details. Your complaint will be reviewed by the administration.</p>
+
+            <?php if (isset($error_msg)): ?>
+                <div style="background: #fee2e2; color: #b91c1c; padding: 15px; border-radius: 8px; margin-bottom: 25px; border: 1px solid #fecaca;">
+                    <?php echo htmlspecialchars($error_msg); ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if (isset($success_msg)): ?>
+                <div style="background: #d1fae5; color: #047857; padding: 15px; border-radius: 8px; margin-bottom: 25px; border: 1px solid #a7f3d0;">
+                    <?php echo htmlspecialchars($success_msg); ?>
+                </div>
+            <?php endif; ?>
+
+            <form id="complaintForm" action="" method="POST" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="title">Title</label>
+                    <input type="text" id="title" name="title" required placeholder="Brief summary of the issue">
+                </div>
+
+                <div class="form-group">
+                    <label for="what_category">Category</label>
+                    <input type="text" id="what_category" name="what_category" required placeholder="e.g., Facilities, Grading, Harassment">
+                </div>
+
+                <div class="form-group">
+                    <label for="respondents">Who are the respondents?</label>
+                    <select id="respondents" name="respondents" required>
+                        <option value="">Select an option</option>
+                        <option value="Facility">Facility (e.g., Maintenance, Security)</option>
+                        <option value="Faculty">Faculty (e.g., Professors, Instructors)</option>
+                        <option value="Administrative">Administrative Office</option>
+                        <option value="Others">Others</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="respondent_detail_group" style="display:none;">
+                    <label for="respondent_detail">Please specify:</label>
+                    <select id="respondent_detail" name="respondent_detail">
+                        <option value="">Select an option</option>
+                        <option value="Single Person">Single Person</option>
+                        <option value="Multiple People">Multiple People</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="respondent_count_group" style="display: none;">
+                    <label for="respondent_count">How many respondents? (optional)</label>
+                    <input type="number" id="respondent_count" name="respondent_count" min="1" placeholder="Enter a number">
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" required placeholder="Provide full details of your complaint..." style="min-height: 150px; resize: vertical;"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Attachments (Optional)</label>
+                    <div style="border: 2px dashed #d1d5db; padding: 20px; text-align: center; border-radius: 8px; cursor: pointer; background: #f9fafb;" onclick="document.getElementById('attachments').click()">
+                        <span style="color: #6b7280; display: block; margin-bottom: 10px;">Click to upload files</span>
+                        <input type="file" id="attachments" name="attachments[]" multiple accept="image/*,.pdf,.doc,.docx" style="display: none;" onchange="updateFileName(this)" />
+                        <small style="color: #9ca3af;">Allowed: Images, PDF, Word Docs (Max 5MB)</small>
+                    </div>
+                    <div id="file-name-display" style="margin-top: 10px; color: #4b5563; font-size: 0.9em;"></div>
+                </div>
+
+                <button type="submit" name="submit" onclick="return confirmSubmission()" id="submitBtn" class="submit-btn">Submit Complaint</button>
+            </form>
         </div>
     </div>
-</div>
 
-<script>
-window.addEventListener('DOMContentLoaded', function() {
-    const submitBtn = document.getElementById('submitBtn');
-    if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit Complaint';
-    }
-});
-function confirmSubmission() {
-    const title = document.getElementById('title').value;
-    const category = document.getElementById('what_category').value.trim();
-    const description = document.getElementById('description').value.trim();
-    const respondentsSel = document.getElementById('respondents').value;
-    const respondentDetailEl = document.getElementById('respondent_detail');
-    const respondents = respondentsSel === 'Others' && respondentDetailEl ? respondentDetailEl.value : respondentsSel;
-    
-    if (!title || !category || !description || !respondents) {
-        alert('Please fill in all required fields before submitting.');
-        return false;
-    }
-    
-    // Populate the confirmation modal with form data
-    document.getElementById('confirm-title').textContent = title;
-    document.getElementById('confirm-category').textContent = category;
-    document.getElementById('confirm-description').textContent = description.length > 100 ? description.substring(0, 100) + '...' : description;
-    document.getElementById('confirm-respondents').textContent = respondents;
-    
-    // Show the custom modal
-    document.getElementById('confirmationModal').style.display = 'block';
-    
-    // Prevent form submission for now
-    return false;
-}
+    <!-- Confirmation Modal -->
+    <div id="confirmationModal" class="modal">
+        <div class="modal-content">
+            <div style="padding: 20px; border-bottom: 1px solid #e5e7eb;">
+                <h3 style="margin: 0; color: #111827;">Confirm Submission</h3>
+            </div>
+            <div style="padding: 24px;">
+                <div style="margin-bottom: 15px;">
+                    <strong style="display: block; color: #6b7280; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px;">Title</strong>
+                    <span id="confirm-title" style="color: #111827; font-weight: 500;"></span>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <strong style="display: block; color: #6b7280; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px;">Category</strong>
+                    <span id="confirm-category" style="color: #111827; font-weight: 500;"></span>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <strong style="display: block; color: #6b7280; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px;">Description</strong>
+                    <span id="confirm-description" style="color: #374151; line-height: 1.5;"></span>
+                </div>
 
-function closeConfirmationModal() {
-    document.getElementById('confirmationModal').style.display = 'none';
-}
+                <div style="display: flex; gap: 15px; margin-top: 30px;">
+                    <button type="button" onclick="closeConfirmationModal()" style="flex: 1; padding: 12px; border: 1px solid #d1d5db; background: white; color: #374151; border-radius: 8px; font-weight: 600; cursor: pointer;">Edit</button>
+                    <button type="button" onclick="submitComplaint()" style="flex: 1; padding: 12px; border: none; background: #4f46e5; color: white; border-radius: 8px; font-weight: 600; cursor: pointer;">Confirm & Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-function submitComplaint() {
-    // Close the modal
-    closeConfirmationModal();
-    
-    // Submit the form (ensure native submit path)
-    const form = document.getElementById('complaintForm');
-    // add a hidden marker in case any server logic checks for it
-    let marker = document.getElementById('confirmed_via_modal');
-    if (!marker) {
-        marker = document.createElement('input');
-        marker.type = 'hidden';
-        marker.name = 'confirmed_via_modal';
-        marker.id = 'confirmed_via_modal';
-        marker.value = '1';
-        form.appendChild(marker);
-    }
-    if (typeof form.requestSubmit === 'function') {
-        const submitBtn = document.getElementById('submitBtn');
-        form.requestSubmit(submitBtn || undefined);
-    } else {
-        form.submit();
-    }
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.querySelector('form');
-    if (form) {
-        const errorMessage = document.querySelector('.message.error');
-        if (errorMessage) {
-            const submitBtn = document.querySelector('button[type="submit"]');
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Submit Complaint';
+    <script>
+        function updateFileName(input) {
+            const display = document.getElementById('file-name-display');
+            if (input.files.length > 0) {
+                display.textContent = input.files.length + ' file(s) selected';
+            } else {
+                display.textContent = '';
             }
         }
-    }
-});
 
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.querySelector('form');
-    const inputs = form.querySelectorAll('input, select, textarea');
-    
-    inputs.forEach(input => {
-        input.addEventListener('blur', function() {
-            if (this.hasAttribute('required') && !this.value.trim()) {
-                this.style.borderColor = '#dc3545';
-                this.style.backgroundColor = '#fff5f5';
-            } else {
-                this.style.borderColor = '#E9ECEF';
-                this.style.backgroundColor = '#FFFFFF';
+        function confirmSubmission() {
+            const title = document.getElementById('title').value;
+            const category = document.getElementById('what_category').value;
+            const description = document.getElementById('description').value;
+            const respondents = document.getElementById('respondents').value;
+
+            if (!title || !category || !description || !respondents) {
+                return true; // Let browser validation handle it
             }
-        });
-        
-        input.addEventListener('input', function() {
-            if (this.value.trim()) {
-                this.style.borderColor = '#28a745';
-                this.style.backgroundColor = '#f8fff8';
+
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-category').textContent = category;
+            document.getElementById('confirm-description').textContent = description.substring(0, 150) + (description.length > 150 ? '...' : '');
+
+            document.getElementById('confirmationModal').style.display = 'block';
+            return false;
+        }
+
+        function closeConfirmationModal() {
+            document.getElementById('confirmationModal').style.display = 'none';
+        }
+
+        function submitComplaint() {
+            closeConfirmationModal();
+            const form = document.getElementById('complaintForm');
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.removeAttribute('onclick'); // Prevent duplicate checks
+
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit(submitBtn);
             } else {
-                this.style.borderColor = '#E9ECEF';
-                this.style.backgroundColor = '#FFFFFF';
+                form.submit();
             }
-        });
-    });
-});
+        }
 
-<?php if (isset($form_reset) && $form_reset): ?>
-document.querySelector('form').reset();
-<?php endif; ?>
+        function updateRespondentConditionalUI() {
+            const respondentsSel = document.getElementById('respondents');
+            const detailGroup = document.getElementById('respondent_detail_group');
+            const countGroup = document.getElementById('respondent_count_group');
 
-function resetButton() {
-    const submitBtn = document.getElementById('submitBtn');
-    if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit Complaint';
-    }
-}
+            if (respondentsSel.value === 'Others') {
+                detailGroup.style.display = 'block';
+            } else {
+                detailGroup.style.display = 'none';
+            }
 
-function toggleCustomCategory() {
-    // removed category select
-}
+            const detailSel = document.getElementById('respondent_detail');
+            const effective = respondentsSel.value === 'Others' ? detailSel.value : respondentsSel.value;
 
-function updateRespondentConditionalUI() {
-    const respondentsSel = document.getElementById('respondents');
-    const detailGroup = document.getElementById('respondent_detail_group');
-    const detailSel = document.getElementById('respondent_detail');
-    const countGroup = document.getElementById('respondent_count_group');
-    const countInput = document.getElementById('respondent_count');
+            if (effective === 'Multiple People') {
+                countGroup.style.display = 'block';
+            } else {
+                countGroup.style.display = 'none';
+            }
+        }
 
-    // Show detail selector only when Others chosen
-    if (respondentsSel.value === 'Others') {
-        detailGroup.style.display = 'block';
-    } else {
-        detailGroup.style.display = 'none';
-        detailSel.value = '';
-    }
-    // Show count when Multiple People selected directly or via detail
-    const effective = respondentsSel.value === 'Others' ? detailSel.value : respondentsSel.value;
-    if (effective === 'Multiple People') {
-        countGroup.style.display = 'block';
-    } else {
-        countGroup.style.display = 'none';
-        countInput.value = '';
-    }
-}
+        document.getElementById('respondents').addEventListener('change', updateRespondentConditionalUI);
+        document.getElementById('respondent_detail').addEventListener('change', updateRespondentConditionalUI);
+        updateRespondentConditionalUI();
 
-document.getElementById('respondents').addEventListener('change', updateRespondentConditionalUI);
-document.getElementById('respondent_detail').addEventListener('change', updateRespondentConditionalUI);
-// Initialize on load
-updateRespondentConditionalUI();
-
-window.addEventListener('load', function() {
-    resetButton();
-});
-
-setTimeout(resetButton, 100);
-setTimeout(resetButton, 500);
-setTimeout(resetButton, 1000);
-
-// Close modal when clicking outside of it
-window.onclick = function(event) {
-    const modal = document.getElementById('confirmationModal');
-    if (event.target === modal) {
-        closeConfirmationModal();
-    }
-}
-
-// Close modal with Escape key
-document.addEventListener('keydown', function(event) {
-    if (event.key === 'Escape') {
-        closeConfirmationModal();
-    }
-});
-</script>
+        window.onclick = function(event) {
+            const modal = document.getElementById('confirmationModal');
+            if (event.target == modal) {
+                closeConfirmationModal();
+            }
+        }
+    </script>
 </body>
+
 </html>

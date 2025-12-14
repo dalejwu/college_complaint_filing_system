@@ -1,0 +1,64 @@
+/* Print Styles */
+@media print {
+
+    .sidebar,
+    .admin-actions,
+    .section-actions,
+    .action-buttons,
+    .modal,
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger,
+    .btn-warning,
+    .btn-view,
+    .btn-edit,
+    .btn-delete,
+    .btn-reply,
+    .btn-approve,
+    .btn-deny,
+    .trash-tabs {
+        display: none !important;
+    }
+
+    body {
+        background: white;
+        color: black;
+    }
+
+    .main-content {
+        margin-left: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+    }
+
+    .dashboard-section {
+        display: block !important;
+        /* Show all sections or specific logic needed? */
+        /* Actually, usually we only want to print the active section or specific report */
+    }
+
+    /* If printing specific report via printDiv, body is replaced, so these might not apply to that context, 
+       but good for general Ctrl+P */
+
+    .stat-card {
+        border: 1px solid #ddd;
+        box-shadow: none;
+    }
+
+    table {
+        width: 100% !important;
+        border-collapse: collapse;
+    }
+
+    th,
+    td {
+        border: 1px solid #ddd !important;
+        color: black !important;
+    }
+
+    .status-badge {
+        border: 1px solid #ccc;
+        background: none !important;
+        color: black !important;
+    }
+}
